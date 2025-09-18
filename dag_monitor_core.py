@@ -12,7 +12,6 @@ from enum import Enum
 from typing import List, Dict, Any, Optional
 import requests
 import polars as pl
-import altair as alt
 
 
 class TaskState(Enum):
@@ -309,146 +308,6 @@ class TaskAnalyzer:
         return summary
 
 
-class ChartGenerator:
-    """
-    Generates visualizations using Altair for task data analysis.
-    Creates interactive charts for different aspects of task execution.
-    """
-    
-    def __init__(self, color_scheme: Dict[str, str] = None, width: int = 800, height: int = 400):
-        """
-        Initialize chart generator with optional customization.
-        
-        Args:
-            color_scheme: Dictionary mapping task states to colors
-            width: Default chart width
-            height: Default chart height
-        """
-        self.color_scheme = color_scheme or {
-            "success": "#2E7D32",
-            "failed": "#D32F2F", 
-            "skipped": "#FF9800",
-            "running": "#1976D2",
-            "queued": "#757575",
-            "up_for_retry": "#9C27B0"
-        }
-        self.width = width
-        self.height = height
-    
-    def create_task_state_distribution_chart(self, df: pl.DataFrame, width: int = None, height: int = None) -> alt.Chart:
-        """
-        Create a bar chart showing the distribution of task states.
-        
-        Args:
-            df: DataFrame with task data
-            width: Chart width (uses default if None)
-            height: Chart height (uses default if None)
-            
-        Returns:
-            Altair chart object
-        """
-        if df.is_empty():
-            return alt.Chart().mark_text(text="No data available", size=20)
-        
-        # Use provided dimensions or defaults
-        chart_width = width or 500
-        chart_height = height or 300
-        
-        # Aggregate task states
-        state_counts = df.group_by("task_state").agg(pl.count().alias("count"))
-        
-        # Extract colors and domains from color scheme
-        domains = list(self.color_scheme.keys())
-        ranges = list(self.color_scheme.values())
-        
-        chart = alt.Chart(state_counts.to_pandas()).mark_bar().encode(
-            x=alt.X("task_state:N", title="Task State", sort="-y"),
-            y=alt.Y("count:Q", title="Number of Tasks"),
-            color=alt.Color(
-                "task_state:N",
-                scale=alt.Scale(domain=domains, range=ranges),
-                legend=alt.Legend(title="Task State")
-            ),
-            tooltip=["task_state:N", "count:Q"]
-        ).properties(
-            width=chart_width,
-            height=chart_height,
-            title="Task State Distribution"
-        )
-        
-        return chart
-    
-    def create_dag_runs_timeline_chart(self, df: pl.DataFrame, width: int = None, height: int = None) -> alt.Chart:
-        """
-        Create a timeline chart showing DAG runs and their task states over time.
-        
-        Args:
-            df: DataFrame with task data
-            width: Chart width (uses default if None)
-            height: Chart height (uses default if None)
-            
-        Returns:
-            Altair chart object
-        """
-        if df.is_empty():
-            return alt.Chart().mark_text(text="No data available", size=20)
-        
-        # Use provided dimensions or defaults
-        chart_width = width or self.width
-        chart_height = height or self.height
-        
-        # Convert to pandas for Altair
-        chart_data = df.select([
-            "dag_run_id", "logical_date", "task_id", "task_state", "duration", "run_type"
-        ]).to_pandas()
-        
-        # Extract colors and domains from color scheme
-        domains = list(self.color_scheme.keys())
-        ranges = list(self.color_scheme.values())
-        
-        chart = alt.Chart(chart_data).mark_circle(size=100).encode(
-            x=alt.X("logical_date:T", title="Logical Date"),
-            y=alt.Y("task_id:N", title="Task ID"),
-            color=alt.Color(
-                "task_state:N",
-                scale=alt.Scale(domain=domains, range=ranges),
-                legend=alt.Legend(title="Task State")
-            ),
-            size=alt.Size("duration:Q", title="Duration (s)", scale=alt.Scale(range=[50, 400])),
-            tooltip=["dag_run_id:N", "task_id:N", "task_state:N", "duration:Q", "run_type:N"]
-        ).properties(
-            width=chart_width,
-            height=chart_height,
-            title="DAG Runs Timeline - Task Execution Over Time"
-        )
-        
-        return chart
-    
-    def save_charts_as_html(self, charts: Dict[str, alt.Chart], output_dir: str = "/tmp") -> List[str]:
-        """
-        Save charts as HTML files.
-        
-        Args:
-            charts: Dictionary mapping chart names to Altair chart objects
-            output_dir: Directory to save HTML files
-            
-        Returns:
-            List of file paths where charts were saved
-        """
-        saved_files = []
-        
-        for chart_name, chart in charts.items():
-            try:
-                filename = f"{output_dir}/airflow_{chart_name}.html"
-                chart.save(filename)
-                saved_files.append(filename)
-                print(f"📊 Chart saved: {filename}")
-            except Exception as e:
-                print(f"❌ Error saving chart {chart_name}: {e}")
-        
-        return saved_files
-
-
 def display_statistics(stats: Dict[str, Any]) -> None:
     """
     Display basic statistics in a formatted way.
@@ -502,7 +361,7 @@ def display_no_skipped_analysis(no_skipped_df: pl.DataFrame) -> None:
         print()
 
 
-def validate_configuration(dag_id: str, time_period_str: str, task_states_list: List[str] = None) -> tuple:
+def validate_configuration(dag_id: str, time_period_str: str, task_states_list: Optional[List[str]] = None) -> tuple:
     """
     Validate configuration parameters and return parsed values.
     
